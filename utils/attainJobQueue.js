@@ -61,27 +61,27 @@ jobQueue.process(CONCURRENCY, async (job) => {
   });
 });
 
-function scheduleFritoLayJob(filePath, username, password, email) {
+function scheduleJob(filePath, username, password, email, type) {
   const fileName = filePath.split("/")[1] + ".csv";
   console.log(fileName);
   jobQueue
-    .add({ filePath, username, password, type: "fritolay" })
+    .add({ filePath, username, password, type })
     .then((job) => {
       job
         .finished()
         .then(async () => {
-          console.log(`FritoLay job ${job.id} completed`);
+          console.log(`Attain ${type} job ${job.id} completed`);
           sendEmail(
             email,
-            "FritoLay Job Completed",
-            "Your FritoLay job has completed. The csv in attached below.",
+            `Attain ${type} Job Completed`,
+            `Your Attain ${type} job has completed. The csv in attached below.`,
             [{ fileName: fileName, path: "results/" + fileName }]
           );
         })
         .catch((error) => {
-          console.error(`FritoLay job ${job.id} failed`, error);
+          console.error(`Attain ${type} job ${job.id} failed`, error);
         });
     });
 }
 
-export { scheduleFritoLayJob, jobQueue };
+export { scheduleJob, jobQueue };
