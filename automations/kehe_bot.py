@@ -1,5 +1,5 @@
 import asyncio
-from web_agent import JoshyTrain
+from automations.web_agent import JoshyTrain
 from playwright.async_api import async_playwright
 import os
 from dotenv import load_dotenv
@@ -219,40 +219,45 @@ async def main():
                         row["name_ordered"] = name_ordered
                 
                 print(row["name_ordered"])
-
-                number_of_packs = row["total_packs_ordered"]
-                # Select the element
-                element_handle = await page.query_selector_all(
-                    'input[role="spinbutton"][inputmode="numeric"]'
-                )
-
-                # Fill the element with the desired value
-                await element_handle[i].fill(number_of_packs)
-
-                # Find the button by its text and class. Ensure the class name used is unique to the button.
-                button_selector = await page.query_selector_all('button:has-text("Add")')
                 
-                # Click the button
-                await button_selector[i].click()
+                try:
+                    number_of_packs = row["total_packs_ordered"]
+                    # Select the element
+                    element_handle = await page.query_selector_all(
+                        'input[role="spinbutton"][inputmode="numeric"]'
+                    )
 
-                # Selector for the modal based on its class and the title text contained within
-                modal_selector = 'div.kehe-modal:has-text("Add to Cart")'
+                    # Fill the element with the desired value
+                    await element_handle[i].fill(number_of_packs, timeout=5000)
 
-                # Attempt to find the modal element
-                modal_element = await page.query_selector(modal_selector)
+                    # Find the button by its text and class. Ensure the class name used is unique to the button.
+                    button_selector = await page.query_selector_all('button:has-text("Add")')
+                    
+                    # Click the button
+                    await button_selector[i].click(timeout=5000)
 
-                order_name = "UCSB - 03/15"
+                    # Selector for the modal based on its class and the title text contained within
+                    modal_selector = 'div.kehe-modal:has-text("Add to Cart")'
 
-                # Check if the modal element exists
-                if modal_element:
-                    try:
-                        await page.locator("kendo-textbox").click(timeout=5000)
-                        await page.locator(
-                            "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
-                        ).fill(order_name)
-                    except Exception as e:
-                        print(e)
-                    await page.locator('role=button[name="Add to Cart"]').click()
+                    # Attempt to find the modal element
+                    modal_element = await page.query_selector(modal_selector)
+
+                    order_name = "UCSB - 03/15"
+
+                    # Check if the modal element exists
+                    if modal_element:
+                        try:
+                            await page.locator("kendo-textbox").click(timeout=5000)
+                            await page.locator(
+                                "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
+                            ).fill(order_name)
+                        except Exception as e:
+                            print(e)
+                        await page.locator('role=button[name="Add to Cart"]').click()
+                except Exception as e:
+                    print(e)
+                    row["out_of_stock"] = True
+                    row["out_of_stock_reason"] = "product_oos"
                 result_rows.append(row)
 
             with open("result.csv", mode="w", newline="") as file:
