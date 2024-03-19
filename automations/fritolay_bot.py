@@ -163,7 +163,7 @@ async def search(page, item_name, search_terms):
                 f".MuiGrid-root-128.product-tile.MuiGrid-item-130.MuiGrid-grid-xs-6-168.MuiGrid-grid-sm-4-180.MuiGrid-grid-md-4-194.MuiGrid-grid-lg-3-207:nth-of-type({i}) .productlist-img"
             )
             await item_div.click()
-            prompt = f"""Are these two the same item? {item_name} and {card_text_map[i]}, little difference in size by 1oz or smaller is okay. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
+            prompt = f"""Are these two the same item? {item_name} and {card_text_map[i]}, little difference in size by 1oz or smaller is okay. DO NOT CLICK OR INTERACT WITH ANYTHING ON THE PAGE. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
             response = await joshyTrain.chat(prompt)
             close_icon = await page.query_selector(
                         'img[src="a8d398bb099ac1e54d401925030b9aa2.svg"]'

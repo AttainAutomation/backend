@@ -1,5 +1,5 @@
 import asyncio
-from automations.web_agent import JoshyTrain
+from web_agent import JoshyTrain
 from playwright.async_api import async_playwright
 import os
 from dotenv import load_dotenv
@@ -7,6 +7,7 @@ import csv
 import re
 import argparse
 from openai import OpenAI
+from datetime import datetime
 
 load_dotenv()
 
@@ -45,6 +46,7 @@ async def search(page, item_name):
         f"""for {item_name})
         Use your knowledge of the product to identify the correct brand name (for example Sun Chips is a typo of SunChips so you should use SunChips)
         Munchies - Flamin' Hot - 3.0 oz, the brand is just Munchies
+        DO NOT CLICK OR INTERACT WITH ANYTHING ON THE PAGE
         ONLY respond in the following JSON format:
 
         {{"searchTerm": "the brand name of the item"}}
@@ -143,15 +145,16 @@ async def search(page, item_name):
             data = joshyTrain.extract_json(response)
             confidence = int(data["confidence"])
             i = int(data["key"])
+            name = all_items[i][i]
             images = await page.query_selector_all('td[kendogridcell][data-kendo-grid-column-index="2"]')
             if len(images) > i:
                 await images[i].click()
-            prompt = f"""Are these two the same item? {item_name} and {all_items[i]}, little difference in size by 1 oz or smaller is okay. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
+            prompt = f"""Are these two the same item? {item_name} and {name}, little difference in size by 1 oz or smaller is okay. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
             response = await joshyTrain.chat(prompt)
             data = joshyTrain.extract_json(response)
             await page.click('em.fas.fa-times')
             if data["answer"] == "true" and confidence >= minimum_confidence:
-                i, all_items[i]
+                return i, name
                 break
         return -1, "not_found"
     except Exception as e:
@@ -167,22 +170,41 @@ If I'm doing that I'll just say that I didn't find the item
 
 async def main():
     async with async_playwright() as p:
+        # Initialize the parser
+        parser = argparse.ArgumentParser()
+
+        # Add parameters
+        parser.add_argument("-f", type=str)
+        parser.add_argument("-u", type=str)
+        parser.add_argument("-p", type=str)
+
+        # Parse the arguments
+        fileName = parser.parse_args().f
+        username = parser.parse_args().u
+        password = parser.parse_args().p
+
+        # file = "kehe3.csv"
+        # username = "jack@duffl.com"
+        # password = "dufflucsb2021"
+
+        print(fileName, username, password)
+
         minimum_confidence = 7
         browser = await p.chromium.launch(headless=False, slow_mo=50)
         page = await browser.new_page()
         ## LOGGING IN
         await page.goto("https://connectretailer.kehe.com/")
         await page.wait_for_timeout(5000)
-        await page.get_by_placeholder("e.g. contact@email.com").fill("jack@duffl.com")
+        await page.get_by_placeholder("e.g. contact@email.com").fill(username)
         await page.click(".btn.btn-primary.btn-medium.login-button")
-        await page.fill("#password", "dufflucsb2021")
+        await page.fill("#password", password)
         await page.get_by_text("Log In", exact=True).click()
 
         await page.wait_for_timeout(5000)
 
         result_rows = []
 
-        with open("kehe3.csv", mode="r") as file:
+        with open(fileName, mode="r") as file:
             dict_reader = csv.DictReader(file)
             for row in dict_reader:
                 row["name_ordered"] = ""
@@ -211,7 +233,7 @@ async def main():
                 else:
                     i, name_ordered = await search(page, item_name)
                     if i < 0:
-                        row["out_of_stock"] = "true"
+                        row["is_out_of_stock"] = True
                         row["out_of_stock_reason"] = name_ordered
                         result_rows.append(row)
                         continue
@@ -242,25 +264,32 @@ async def main():
                     # Attempt to find the modal element
                     modal_element = await page.query_selector(modal_selector)
 
-                    order_name = "UCSB - 03/15"
+                    order_name = order_name = datetime.now().strftime('%m/%d')
 
                     # Check if the modal element exists
                     if modal_element:
                         try:
-                            await page.locator("kendo-textbox").click(timeout=5000)
-                            await page.locator(
-                                "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
-                            ).fill(order_name)
+                            selector = 'span.newOrderLink'  # CSS selector for the element
+                            # Check if the element exists
+                            if await page.query_selector(selector):
+                                print("Element found, clicking on it...")
+                                await page.click(selector)
+                                await page.locator("kendo-textbox").click(timeout=5000)
+                                await page.locator(
+                                    "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
+                                ).fill(order_name)
                         except Exception as e:
                             print(e)
                         await page.locator('role=button[name="Add to Cart"]').click()
                 except Exception as e:
                     print(e)
-                    row["out_of_stock"] = True
+                    row["is_out_of_stock"] = True
                     row["out_of_stock_reason"] = "product_oos"
                 result_rows.append(row)
 
-            with open("result.csv", mode="w", newline="") as file:
+            fileName = fileName.split("/")[1] + ".csv"
+            # writing csv with new columns
+            with open("./results/" + fileName, mode="w", newline="") as file:
                 sorted_rows = sorted(result_rows, key=lambda x: x.get('product_name', ''))
                 fieldnames = sorted_rows[0].keys() if sorted_rows else []
                 dict_writer = csv.DictWriter(file, fieldnames=fieldnames)
