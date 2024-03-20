@@ -3,8 +3,8 @@ from web_agent import JoshyTrain
 from playwright.async_api import async_playwright
 import os
 from dotenv import load_dotenv
-import csv
-import re
+from utils.json_utils import extract_json
+from utils.csv_utils import read_from_csv, write_to_csv
 import argparse
 from openai import OpenAI
 from datetime import datetime
@@ -43,7 +43,7 @@ async def search(page, item_name):
         minimum_confidence = 7
 
         response = await chat(
-        f"""for {item_name})
+            f"""for {item_name})
         Use your knowledge of the product to identify the correct brand name (for example Sun Chips is a typo of SunChips so you should use SunChips)
         Munchies - Flamin' Hot - 3.0 oz, the brand is just Munchies
         DO NOT CLICK OR INTERACT WITH ANYTHING ON THE PAGE
@@ -52,8 +52,8 @@ async def search(page, item_name):
         {{"searchTerm": "the brand name of the item"}}
         """
         )
-        
-        data = joshyTrain.extract_json(response)
+
+        data = extract_json(response)
         brand = data["searchTerm"]
 
         for search_term in [item_name, brand]:
@@ -61,27 +61,23 @@ async def search(page, item_name):
 
             # Manual Search
             search_bar = await page.query_selector(
-            'input[data-automation-id="edo-top-bar-search"]'
+                'input[data-automation-id="edo-top-bar-search"]'
             )
             await search_bar.fill(search_term)
             await page.keyboard.press("Enter")
 
             await page.wait_for_timeout(3000)
-            brand_name_selector = 'div[data-automation-id="edo-products-list-item-supplier-name"] strong'
+            brand_name_selector = (
+                'div[data-automation-id="edo-products-list-item-supplier-name"] strong'
+            )
             product_name_selector = (
                 'span[data-automation-id="edo-products-list-item-product-name"]'
             )
-            product_size_selector = 'div[_ngcontent-ng-c2225601486]:nth-of-type(2)'
+            product_size_selector = "div[_ngcontent-ng-c2225601486]:nth-of-type(2)"
 
-            brand_name_elements = await page.query_selector_all(
-                brand_name_selector
-            )
-            product_name_elements = await page.query_selector_all(
-                product_name_selector
-            )
-            product_size_elements = await page.query_selector_all(
-                product_size_selector
-            )
+            brand_name_elements = await page.query_selector_all(brand_name_selector)
+            product_name_elements = await page.query_selector_all(product_name_selector)
+            product_size_elements = await page.query_selector_all(product_size_selector)
 
             all_items = []
 
@@ -142,17 +138,19 @@ async def search(page, item_name):
             have your explanation inside the JSON, your response should only contain the JSON and NOTHING ELSE
             """
             response = await chat(prompt)
-            data = joshyTrain.extract_json(response)
+            data = extract_json(response)
             confidence = int(data["confidence"])
             i = int(data["key"])
             name = all_items[i][i]
-            images = await page.query_selector_all('td[kendogridcell][data-kendo-grid-column-index="2"]')
+            images = await page.query_selector_all(
+                'td[kendogridcell][data-kendo-grid-column-index="2"]'
+            )
             if len(images) > i:
                 await images[i].click()
             prompt = f"""Are these two the same item? {item_name} and {name}, little difference in size by 1 oz or smaller is okay. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
             response = await joshyTrain.chat(prompt)
-            data = joshyTrain.extract_json(response)
-            await page.click('em.fas.fa-times')
+            data = extract_json(response)
+            await page.click("em.fas.fa-times")
             if data["answer"] == "true" and confidence >= minimum_confidence:
                 return i, name
                 break
@@ -160,6 +158,7 @@ async def search(page, item_name):
     except Exception as e:
         print(e)
         return -1, "not_found"
+
 
 """
 UPC and if UPC doesn't work I'll see if there's a different UPC for the item online and try that
@@ -189,7 +188,6 @@ async def main():
 
         print(fileName, username, password)
 
-        minimum_confidence = 7
         browser = await p.chromium.launch(headless=False, slow_mo=50)
         page = await browser.new_page()
         ## LOGGING IN
@@ -202,99 +200,98 @@ async def main():
 
         await page.wait_for_timeout(5000)
 
-        result_rows = []
+        rows = read_from_csv(fileName)
+        for row in rows:
 
-        with open(fileName, mode="r") as file:
-            dict_reader = csv.DictReader(file)
-            for row in dict_reader:
-                row["name_ordered"] = ""
-                item_name = row["product_name"]
-                upc = row["upc"]
+            row["name_ordered"] = ""
+            item_name = row["product_name"]
+            upc = row["upc"]
 
-                joshyTrain = JoshyTrain(page)
-                # Assuming 'page' is your page object
-                search_bar = await page.query_selector(
-                    'input[data-automation-id="edo-top-bar-search"]'
+            # Assuming 'page' is your page object
+            search_bar = await page.query_selector(
+                'input[data-automation-id="edo-top-bar-search"]'
+            )
+            element = None
+            if upc:
+                await search_bar.fill(upc)
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(3000)
+                element = await page.query_selector(
+                    'input[data-automation-id="edo-products-list-checkbox"]'
                 )
-                element = None
-                if upc:
-                    await search_bar.fill(upc)
-                    await page.keyboard.press("Enter")
-                    await page.wait_for_timeout(3000)
-                    element = await page.query_selector(
-                        'input[data-automation-id="edo-products-list-checkbox"]'
-                    )
-                if element:
-                    brand_name = await page.inner_text('div[data-automation-id="edo-products-list-item-supplier-name"] strong')
-                    product_name = await page.inner_text('span[data-automation-id="edo-products-list-item-product-name"]')
-                    product_size = await page.inner_text('div[_ngcontent-ng-c2225601486]:nth-of-type(2)')
-                    row["name_ordered"] = brand_name + " " + product_name + " " + product_size
-                    i = 0
-                else:
-                    i, name_ordered = await search(page, item_name)
-                    if i < 0:
-                        row["is_out_of_stock"] = True
-                        row["out_of_stock_reason"] = name_ordered
-                        result_rows.append(row)
-                        continue
-                    else:
-                        row["name_ordered"] = name_ordered
-                
-                print(row["name_ordered"])
-                
-                try:
-                    number_of_packs = row["total_packs_ordered"]
-                    # Select the element
-                    element_handle = await page.query_selector_all(
-                        'input[role="spinbutton"][inputmode="numeric"]'
-                    )
-
-                    # Fill the element with the desired value
-                    await element_handle[i].fill(number_of_packs, timeout=5000)
-
-                    # Find the button by its text and class. Ensure the class name used is unique to the button.
-                    button_selector = await page.query_selector_all('button:has-text("Add")')
-                    
-                    # Click the button
-                    await button_selector[i].click(timeout=5000)
-
-                    # Selector for the modal based on its class and the title text contained within
-                    modal_selector = 'div.kehe-modal:has-text("Add to Cart")'
-
-                    # Attempt to find the modal element
-                    modal_element = await page.query_selector(modal_selector)
-
-                    order_name = order_name = datetime.now().strftime('%m/%d')
-
-                    # Check if the modal element exists
-                    if modal_element:
-                        try:
-                            selector = 'span.newOrderLink'  # CSS selector for the element
-                            # Check if the element exists
-                            if await page.query_selector(selector):
-                                print("Element found, clicking on it...")
-                                await page.click(selector)
-                                await page.locator("kendo-textbox").click(timeout=5000)
-                                await page.locator(
-                                    "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
-                                ).fill(order_name)
-                        except Exception as e:
-                            print(e)
-                        await page.locator('role=button[name="Add to Cart"]').click()
-                except Exception as e:
-                    print(e)
+            if element:
+                brand_name = await page.inner_text(
+                    'div[data-automation-id="edo-products-list-item-supplier-name"] strong'
+                )
+                product_name = await page.inner_text(
+                    'span[data-automation-id="edo-products-list-item-product-name"]'
+                )
+                product_size = await page.inner_text(
+                    "div[_ngcontent-ng-c2225601486]:nth-of-type(2)"
+                )
+                row["name_ordered"] = (
+                    brand_name + " " + product_name + " " + product_size
+                )
+                i = 0
+            else:
+                i, name_ordered = await search(page, item_name)
+                if i < 0:
                     row["is_out_of_stock"] = True
-                    row["out_of_stock_reason"] = "product_oos"
-                result_rows.append(row)
+                    row["out_of_stock_reason"] = name_ordered
+                    continue
+                else:
+                    row["name_ordered"] = name_ordered
 
-            fileName = fileName.split("/")[1] + ".csv"
-            # writing csv with new columns
-            with open("./results/" + fileName, mode="w", newline="") as file:
-                sorted_rows = sorted(result_rows, key=lambda x: x.get('product_name', ''))
-                fieldnames = sorted_rows[0].keys() if sorted_rows else []
-                dict_writer = csv.DictWriter(file, fieldnames=fieldnames)
-                dict_writer.writeheader()
-                dict_writer.writerows(sorted_rows)
+            print(row["name_ordered"])
+
+            try:
+                number_of_packs = row["total_packs_ordered"]
+                # Select the element
+                element_handle = await page.query_selector_all(
+                    'input[role="spinbutton"][inputmode="numeric"]'
+                )
+
+                # Fill the element with the desired value
+                await element_handle[i].fill(number_of_packs, timeout=5000)
+
+                # Find the button by its text and class. Ensure the class name used is unique to the button.
+                button_selector = await page.query_selector_all(
+                    'button:has-text("Add")'
+                )
+
+                # Click the button
+                await button_selector[i].click(timeout=5000)
+
+                # Selector for the modal based on its class and the title text contained within
+                modal_selector = 'div.kehe-modal:has-text("Add to Cart")'
+
+                # Attempt to find the modal element
+                modal_element = await page.query_selector(modal_selector)
+
+                order_name = order_name = datetime.now().strftime("%m/%d")
+
+                # Check if the modal element exists
+                if modal_element:
+                    try:
+                        selector = "span.newOrderLink"  # CSS selector for the element
+                        # Check if the element exists
+                        if await page.query_selector(selector):
+                            print("Element found, clicking on it...")
+                            await page.click(selector)
+                            await page.locator("kendo-textbox").click(timeout=5000)
+                            await page.locator(
+                                "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
+                            ).fill(order_name)
+                    except Exception as e:
+                        print(e)
+                    await page.locator('role=button[name="Add to Cart"]').click()
+            except Exception as e:
+                print(e)
+                row["is_out_of_stock"] = True
+                row["out_of_stock_reason"] = "product_oos"
+
+        fileName = "./results/" + fileName.split("/")[1] + ".csv"
+        write_to_csv(fileName, rows, alphabetical=True)
 
 
 asyncio.run(main())

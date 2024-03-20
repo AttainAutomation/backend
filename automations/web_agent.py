@@ -1,11 +1,10 @@
-from openai import OpenAI
-import openai
+from openai import OpenAI, RateLimitError
 from base64 import b64encode
 import json
 from dotenv import load_dotenv
 from tarsier import Tarsier, GoogleVisionOCRService
 import time
-import re
+from utils.json_utils import extract_json
 import os
 import requests
 import aiofiles
@@ -110,27 +109,6 @@ class JoshyTrain:
         self.tag_to_xpath = tag_to_xpath
         self.page_text = page_text
 
-    def extract_json(self, message):
-        # Normalize newlines and remove control characters except for tab
-        normalized_message = re.sub(r'[\r\n]+', ' ', message)  # Replace newlines with spaces
-        sanitized_message = re.sub(r'[^\x20-\x7E\t]', '', normalized_message)  # Remove non-printable chars
-
-        # Attempt to find JSON starting and ending points without nested checks
-        start = sanitized_message.find('{')
-        end = sanitized_message.rfind('}')
-        
-        if start != -1 and end != -1 and end > start:
-            json_str = sanitized_message[start:end+1]
-            try:
-                json_data = json.loads(json_str)
-                return json_data
-            except json.JSONDecodeError as e:
-                print(f"Error decoding JSON: {e}")
-                return {}
-        else:
-            print("No JSON found in the message")
-            return {}
-
     async def write_code(self, input, new_code):
         return
         with open("comon.py", "r") as file:
@@ -191,7 +169,6 @@ class JoshyTrain:
                         {
                             "type": "text",
                             "text": f"""Here's the screenshot of the website you are on right now.
-                                \n{self.instructions}\n
                                 Here's the text representation of the website:
                                 \n{self.page_text}
                                 """,
@@ -213,7 +190,7 @@ class JoshyTrain:
                         max_tokens=1024,
                     )
                     break
-                except openai.RateLimitError as e:
+                except RateLimitError as e:
                     print(
                         f"Rate limit exceeded, attempt {attempt + 1} of {3}. Retrying in {120} seconds..."
                     )
@@ -236,7 +213,7 @@ class JoshyTrain:
 
             print("Browser Assistant:", message_text)
 
-            data = self.extract_json(message_text)
+            data = extract_json(message_text)
             try:
                 if "click" in data:
                     id = int(data["click"])

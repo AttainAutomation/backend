@@ -3,8 +3,8 @@ from web_agent import JoshyTrain
 from playwright.async_api import async_playwright
 import os
 from dotenv import load_dotenv
-import csv
-import re
+from utils.json_utils import extract_json
+from utils.csv_utils import read_from_csv, write_to_csv
 import argparse
 from openai import OpenAI
 
@@ -45,7 +45,7 @@ async def search(page, item_name, search_terms):
         while True:
             try:
                 response = await chat(
-                f"""
+                    f"""
                 come up with different search terms for {item_name}
                 for example: 
                 Use your knowledge of the product to come up with different search terms. (For example Sun Chips is a typo of SunChips)
@@ -70,7 +70,7 @@ async def search(page, item_name, search_terms):
                 """
                 )
                 # the search term is appended into a list that is passed into gpt so that it knows to not repeat search terms
-                data = joshyTrain.extract_json(response)
+                data = extract_json(response)
                 if data and "searchTerm" in data:
                     search_term = data["searchTerm"]
                     search_terms.append(data)
@@ -156,7 +156,7 @@ async def search(page, item_name, search_terms):
     have your explanation inside the JSON, your response should only contain the JSON and NOTHING ELSE
     """
             response = await chat(prompt)
-            data = joshyTrain.extract_json(response)
+            data = extract_json(response)
             confidence = int(data["confidence"])
             i = int(data["key"])
             item_div = await page.query_selector(
@@ -166,10 +166,10 @@ async def search(page, item_name, search_terms):
             prompt = f"""Are these two the same item? {item_name} and {card_text_map[i]}, little difference in size by 1oz or smaller is okay. DO NOT CLICK OR INTERACT WITH ANYTHING ON THE PAGE. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
             response = await joshyTrain.chat(prompt)
             close_icon = await page.query_selector(
-                        'img[src="a8d398bb099ac1e54d401925030b9aa2.svg"]'
-                    )
+                'img[src="a8d398bb099ac1e54d401925030b9aa2.svg"]'
+            )
             await close_icon.click()
-            data = joshyTrain.extract_json(response)
+            data = extract_json(response)
             if data["answer"] == "true":
                 await page.screenshot(path="screenshot.jpg", full_page=True)
                 # continue searching if confidence did not meet criteria
@@ -225,122 +225,105 @@ async def main():
 
         await page.wait_for_timeout(8000)
 
-        result_rows = []
+        rows = read_from_csv(fileName)
+        for row in rows:
+            row["name_ordered"] = ""
+            item_name = row["product_name"]
+            # item_name = "Sun Chips - French Onion - 7.0 oz"
 
-        # opening csv
-        with open(fileName, mode="r") as file:
-            dict_reader = csv.DictReader(file)
-            # loop through rows
-            for row in dict_reader:
-                row["name_ordered"] = ""
-                item_name = row["product_name"]
-                # item_name = "Sun Chips - French Onion - 7.0 oz"
+            # search function returns index of "found" item, index starts from 1
+            i = await search(page, item_name, [])
+            print(i)
 
-                # search function returns index of "found" item, index starts from 1
-                i = await search(page, item_name, [])
-                print(i)
+            if not i:
+                print("not_found")
+                row["is_out_of_stock"] = True
+                row["out_of_stock_reason"] = "not_found"
+                continue
 
-                if not i:
-                    print("not_found")
+            try:
+                # find the image of the item card (you can only open pop up from image or title)
+                item_div = await page.query_selector(
+                    f".MuiGrid-root-128.product-tile.MuiGrid-item-130.MuiGrid-grid-xs-6-168.MuiGrid-grid-sm-4-180.MuiGrid-grid-md-4-194.MuiGrid-grid-lg-3-207:nth-of-type({i}) .productlist-img"
+                )
+
+                print(item_div)
+
+                await item_div.click()
+
+                await page.wait_for_timeout(2000)
+                await page.screenshot(path="screenshot.jpg", full_page=True)
+
+                await page.wait_for_selector(".product-title", state="visible")
+                modal_text = await page.inner_text(".product-title")
+                row["name_ordered"] = modal_text
+
+                # # get the product details div and get upc and price
+                # product_details_div = await page.query_selector(
+                #     ".MuiGrid-root-128.product-detail-wrapper-inner"
+                # )
+
+                ## probably dont need this right now
+                # upc_number = await product_details_div.query_selector(
+                #     '.product-info-text:has-text("UPC:")'
+                # )
+                # upc_number = re.search(r"UPC:\s*(\d+)", await upc_number.inner_text())
+                # if upc_number:
+                #     upc_number = upc_number.group(1)
+                #     if upc_number != row["upc"]:
+                #         row["updated_upc"] = upc_number
+
+                # product_cost = await product_details_div.query_selector(".product-cost")
+                # product_cost = re.search(r"Cost:\s*\$(\d+\.\d+)", "Cost: $1.88")
+                # if product_cost:
+                #     product_cost = product_cost.group(1)
+                #     if product_cost != row["pack_price"]:
+                #         row["updated_price"] = product_cost
+
+                # check if its out of stock
+                out_of_stock = await page.query_selector(".product-out-stock.list")
+                if out_of_stock:
+                    print("product_oos")
                     row["is_out_of_stock"] = True
-                    row["out_of_stock_reason"] = "not_found"
-                    result_rows.append(row)
-                    continue
-
-                try:
-                    # find the image of the item card (you can only open pop up from image or title)
-                    item_div = await page.query_selector(
-                        f".MuiGrid-root-128.product-tile.MuiGrid-item-130.MuiGrid-grid-xs-6-168.MuiGrid-grid-sm-4-180.MuiGrid-grid-md-4-194.MuiGrid-grid-lg-3-207:nth-of-type({i}) .productlist-img"
+                    row["out_of_stock_reason"] = "product_oos"
+                else:
+                    # order the item
+                    input_element = await page.query_selector(
+                        ".product-detail-wrapper .MuiInputBase-input-395.MuiOutlinedInput-input-382.MuiInputBase-inputAdornedEnd-400.MuiOutlinedInput-inputAdornedEnd-386"
                     )
-
-                    print(item_div)
-
-                    await item_div.click()
+                    print(input_element)
+                    number_of_packs = row["total_packs_ordered"]
+                    await input_element.fill(number_of_packs)
+                    await page.keyboard.press("Tab")
 
                     await page.wait_for_timeout(2000)
                     await page.screenshot(path="screenshot.jpg", full_page=True)
 
-
-                    await page.wait_for_selector(".product-title", state="visible")
-                    modal_text = await page.inner_text(".product-title")
-                    row["name_ordered"] = modal_text
-
-                    # # get the product details div and get upc and price
-                    # product_details_div = await page.query_selector(
-                    #     ".MuiGrid-root-128.product-detail-wrapper-inner"
-                    # )
-
-                    ## probably dont need this right now
-                    # upc_number = await product_details_div.query_selector(
-                    #     '.product-info-text:has-text("UPC:")'
-                    # )
-                    # upc_number = re.search(r"UPC:\s*(\d+)", await upc_number.inner_text())
-                    # if upc_number:
-                    #     upc_number = upc_number.group(1)
-                    #     if upc_number != row["upc"]:
-                    #         row["updated_upc"] = upc_number
-
-                    # product_cost = await product_details_div.query_selector(".product-cost")
-                    # product_cost = re.search(r"Cost:\s*\$(\d+\.\d+)", "Cost: $1.88")
-                    # if product_cost:
-                    #     product_cost = product_cost.group(1)
-                    #     if product_cost != row["pack_price"]:
-                    #         row["updated_price"] = product_cost
-
-                    # check if its out of stock
-                    out_of_stock = await page.query_selector(".product-out-stock.list")
-                    if out_of_stock:
-                        print("product_oos")
-                        row["is_out_of_stock"] = True
-                        row["out_of_stock_reason"] = "product_oos"
-                    else:
-                        # order the item
-                        input_element = await page.query_selector(
-                            ".product-detail-wrapper .MuiInputBase-input-395.MuiOutlinedInput-input-382.MuiInputBase-inputAdornedEnd-400.MuiOutlinedInput-inputAdornedEnd-386"
-                        )
-                        print(input_element)
-                        number_of_packs = row["total_packs_ordered"]
-                        await input_element.fill(number_of_packs)
-                        await page.keyboard.press("Tab")
-
-                        await page.wait_for_timeout(2000)
-                        await page.screenshot(path="screenshot.jpg", full_page=True)
-
-                    # close the details pop up
-                    close_icon = await page.query_selector(
-                        'img[src="a8d398bb099ac1e54d401925030b9aa2.svg"]'
-                    )
-                    await close_icon.click()
-                except Exception as e:
-                    print(e)
-                    row["out_of_stock_reason"] = "not_found"
-
-                await page.wait_for_timeout(2000)
-                await page.screenshot(path="screenshot.jpg", full_page=True)
-                print(row)
-                result_rows.append(row)
-
-            # opening up cart
-            try:
-                cart_icon = await page.query_selector('img[src="www/images/cart.svg"]')
-                await cart_icon.click()
-
-                await page.screenshot(path="screenshot.jpg", full_page=True)
+                # close the details pop up
+                close_icon = await page.query_selector(
+                    'img[src="a8d398bb099ac1e54d401925030b9aa2.svg"]'
+                )
+                await close_icon.click()
             except Exception as e:
                 print(e)
+                row["out_of_stock_reason"] = "not_found"
 
-            fileName = fileName.split("/")[1] + ".csv"
-            # writing csv with new columns
-            with open("./results/" + fileName, mode="w", newline="") as file:
-                # sorted_rows = sorted(result_rows, key=lambda x: x.get('product_name', ''))
-                # fieldnames = sorted_rows[0].keys() if sorted_rows else []
-                # dict_writer = csv.DictWriter(file, fieldnames=fieldnames)
-                # dict_writer.writeheader()
-                # dict_writer.writerows(sorted_rows)
-                fieldnames = result_rows[0].keys()
-                dict_writer = csv.DictWriter(file, fieldnames=fieldnames)
-                dict_writer.writeheader()
-                dict_writer.writerows(result_rows)
+            await page.wait_for_timeout(2000)
+            await page.screenshot(path="screenshot.jpg", full_page=True)
+            print(row)
+
+        # opening up cart
+        try:
+            cart_icon = await page.query_selector('img[src="www/images/cart.svg"]')
+            await cart_icon.click()
+
+            await page.screenshot(path="screenshot.jpg", full_page=True)
+        except Exception as e:
+            print(e)
+
+        fileName = "./results/" + fileName.split("/")[1] + ".csv"
+        # writing csv with new columns
+        write_to_csv(fileName, rows)
 
 
 asyncio.run(main())
