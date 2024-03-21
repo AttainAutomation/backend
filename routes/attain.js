@@ -8,7 +8,6 @@ const router = express.Router();
 
 router.post("/:supplier", csvUpload.single("csv"), async (req, res) => {
   try {
-    res.set("Access-Control-Allow-Origin", "*");
     const filePath = req.file.path;
     const { username, password, email } = req.body;
     const supplier = req.params.supplier;
