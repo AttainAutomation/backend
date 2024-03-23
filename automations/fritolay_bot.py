@@ -323,7 +323,7 @@ async def main():
 
         fileName = "./results/" + fileName.split("/")[1] + ".csv"
         # writing csv with new columns
-        write_to_csv(fileName, rows)
+        write_to_csv(rows, fileName)
 
 
 asyncio.run(main())
