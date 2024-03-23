@@ -182,9 +182,9 @@ async def main():
         username = parser.parse_args().u
         password = parser.parse_args().p
 
-        # file = "kehe3.csv"
-        # username = "jack@duffl.com"
-        # password = "dufflucsb2021"
+        # fileName = "kehe4.csv"
+        # username = "batu@duffl.com"
+        # password = "dufflucla2020"
 
         print(fileName, username, password)
 
@@ -278,10 +278,10 @@ async def main():
                         if await page.query_selector(selector):
                             print("Element found, clicking on it...")
                             await page.click(selector)
-                            await page.locator("kendo-textbox").click(timeout=5000)
-                            await page.locator(
-                                "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
-                            ).fill(order_name)
+                        await page.locator("kendo-textbox").click(timeout=5000)
+                        await page.locator(
+                            "role=textbox[name=\"e.g. \\'Easter Weekend\\'\"]"
+                        ).fill(order_name)
                     except Exception as e:
                         print(e)
                     await page.locator('role=button[name="Add to Cart"]').click()
