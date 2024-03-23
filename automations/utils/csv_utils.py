@@ -1,6 +1,8 @@
 import csv              
+import os
 
 def write_to_csv(rows, fileName, alphabetical=False):
+    os.makedirs(os.path.dirname(fileName), exist_ok=True)
     with open(fileName, mode="w", newline="") as file:
         if alphabetical:
             rows = sorted(rows, key=lambda x: x.get('product_name', ''))
