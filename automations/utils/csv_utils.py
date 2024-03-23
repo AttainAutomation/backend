@@ -1,6 +1,8 @@
 import csv              
+import os
 
 def write_to_csv(rows, fileName, alphabetical=False):
+    os.makedirs(os.path.dirname(fileName), exist_ok=True)
     with open(fileName, mode="w", newline="") as file:
         if alphabetical:
             rows = sorted(rows, key=lambda x: x.get('product_name', ''))
@@ -29,7 +31,3 @@ def print_csv_column_values(filename):
             for column_name, value in row.items():
                 print(f"    {column_name}: {value}")
             print()  # Add a blank line for separation between rows
-
-# Example usage
-filename = 'automations/utils/coremark.csv'  # Replace with your CSV file path
-print_csv_column_values(filename)
