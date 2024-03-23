@@ -291,7 +291,7 @@ async def main():
                 row["out_of_stock_reason"] = "product_oos"
 
         fileName = "./results/" + fileName.split("/")[1] + ".csv"
-        write_to_csv(fileName, rows, alphabetical=True)
+        write_to_csv(rows, fileName, alphabetical=True)
 
 
 asyncio.run(main())
