@@ -7,17 +7,13 @@ from utils.json_utils import extract_json
 from utils.csv_utils import read_from_csv, write_to_csv
 import argparse
 from openai import OpenAI
+import re
 
 load_dotenv()
 
 port = os.getenv("PORT")
 model = OpenAI()
 model.timeout = 30
-
-# TODO:
-
-# gpt cant do math for some reason, it thinks 2.65 and 3 are more than 1 oz size difference
-
 
 async def chat(prompt):
     print("User:", prompt)
@@ -163,8 +159,11 @@ async def search(page, item_name, search_terms):
                 f".MuiGrid-root-128.product-tile.MuiGrid-item-130.MuiGrid-grid-xs-6-168.MuiGrid-grid-sm-4-180.MuiGrid-grid-md-4-194.MuiGrid-grid-lg-3-207:nth-of-type({i}) .productlist-img"
             )
             await item_div.click()
-            prompt = f"""Are these two the same item? {item_name} and {card_text_map[i]}, little difference in size by 1oz or smaller is okay. DO NOT CLICK OR INTERACT WITH ANYTHING ON THE PAGE. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
-            response = await joshyTrain.chat(prompt)
+            try:
+                prompt = f"""Are these two the same item? {item_name} and {card_text_map[i]}, little difference in size by 1oz or smaller is okay. DO NOT CLICK OR INTERACT WITH ANYTHING ON THE PAGE. Respond with the following JSON format: {{"answer": "true or false", "reasoning": "your reasoning"}}"""
+                response = await joshyTrain.chat(prompt)
+            except Exception as e:
+                print(e)
             close_icon = await page.query_selector(
                 'img[src="a8d398bb099ac1e54d401925030b9aa2.svg"]'
             )
@@ -204,15 +203,16 @@ async def main():
         username = parser.parse_args().u
         password = parser.parse_args().p
 
-        # file = "orders.csv"
-        # username = "max@duffl.com"
-        # password = "dufflfrito1071"
+        # fileName = "./fritolay.csv"
+        # username = "klaus@duffl.com"
+        # password = "Garkbock33"
 
         print(fileName, username, password)
 
         browser = await p.chromium.launch(headless=False, slow_mo=50)
 
         page = await browser.new_page()
+        joshyTrain = JoshyTrain(page)
         ## LOGGING IN
         await page.goto("https://shop.fls2u.com/login")
         await page.wait_for_timeout(5000)
@@ -222,8 +222,12 @@ async def main():
         await page.get_by_label("Password*").click()
         await page.get_by_label("Password*").fill(password)
         await page.get_by_label("login", exact=True).click()
-
-        await page.wait_for_timeout(8000)
+        await page.wait_for_timeout(5000)
+        response= await joshyTrain.chat("""Is the login successful? The login is ONLY failed if the page SPECIFICALLY shows that the login has failed. Respond in the following JSON format: {"login": "true or false"}""")
+        data = extract_json(response)
+        if data["login"] == "false":
+            await page.screenshot(path="screenshot.jpg", full_page=True)
+            raise Exception("Incorrect login credentials")
 
         rows = read_from_csv(fileName)
         for row in rows:
@@ -258,10 +262,10 @@ async def main():
                 modal_text = await page.inner_text(".product-title")
                 row["name_ordered"] = modal_text
 
-                # # get the product details div and get upc and price
-                # product_details_div = await page.query_selector(
-                #     ".MuiGrid-root-128.product-detail-wrapper-inner"
-                # )
+                # get the product details div and get upc and price
+                product_details_div = await page.query_selector(
+                    ".MuiGrid-root-128.product-detail-wrapper-inner"
+                )
 
                 ## probably dont need this right now
                 # upc_number = await product_details_div.query_selector(
@@ -273,12 +277,12 @@ async def main():
                 #     if upc_number != row["upc"]:
                 #         row["updated_upc"] = upc_number
 
-                # product_cost = await product_details_div.query_selector(".product-cost")
-                # product_cost = re.search(r"Cost:\s*\$(\d+\.\d+)", "Cost: $1.88")
-                # if product_cost:
-                #     product_cost = product_cost.group(1)
-                #     if product_cost != row["pack_price"]:
-                #         row["updated_price"] = product_cost
+                product_cost = await product_details_div.query_selector(".product-cost")
+                product_cost = re.search(r"Cost:\s*\$(\d+\.\d+)", await product_cost.inner_text())
+                if product_cost:
+                    product_cost = product_cost.group(1)
+                    if product_cost != row["pack_price"]:
+                        row["updated_price"] = product_cost
 
                 # check if its out of stock
                 out_of_stock = await page.query_selector(".product-out-stock.list")

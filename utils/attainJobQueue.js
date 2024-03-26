@@ -64,24 +64,25 @@ jobQueue.process(CONCURRENCY, async (job) => {
 function scheduleJob(filePath, username, password, email, type) {
   const fileName = filePath.split("/")[1] + ".csv";
   console.log(fileName);
-  jobQueue
-    .add({ filePath, username, password, type })
-    .then((job) => {
-      job
-        .finished()
-        .then(async () => {
-          console.log(`Attain ${type} job ${job.id} completed`);
-          sendEmail(
-            email,
-            `Attain ${type} Job Completed`,
-            `Your Attain ${type} job has completed. The csv in attached below.`,
-            [{ fileName: fileName, path: "results/" + fileName }]
-          );
-        })
-        .catch((error) => {
-          console.error(`Attain ${type} job ${job.id} failed`, error);
-        });
-    });
+  jobQueue.add({ filePath, username, password, type }).then((job) => {
+    job
+      .finished()
+      .then(async () => {
+        console.log(`Attain ${type} job ${job.id} completed`);
+        sendEmail(
+          email,
+          `Attain ${type} Job Completed`,
+          `Your Attain ${type} job has completed. The csv in attached below.`,
+          [{ fileName: fileName, path: "results/" + fileName }]
+        );
+      })
+      .catch((error) => {
+        sendEmail(email, `Attain ${type} Job Failed`, error.toString(), [
+          { fileName: "screenshot.jpg", path: "screenshot.jpg" },
+        ]);
+        console.error(`Attain ${type} job ${job.id} failed`, error);
+      });
+  });
 }
 
 export { scheduleJob, jobQueue };
