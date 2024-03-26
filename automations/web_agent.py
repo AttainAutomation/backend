@@ -20,6 +20,11 @@ tarsier = Tarsier(ocr_service)
 model = OpenAI()
 model.timeout = 30
 
+api_keys = [
+    os.getenv("OPENAI_API_KEY"),
+    os.getenv("OPENAI_API_KEY1"),
+]
+
 
 class JoshyTrain:
     def __init__(self, page) -> None:
@@ -191,10 +196,10 @@ class JoshyTrain:
                     )
                     break
                 except RateLimitError as e:
+                    model = OpenAI(api_key=api_keys[attempt + 1])
                     print(
-                        f"Rate limit exceeded, attempt {attempt + 1} of {3}. Retrying in {120} seconds..."
+                        f"Rate limit exceeded, attempt {attempt + 1} of {3}. Retrying with new API key..."
                     )
-                    time.sleep(120)
 
             if not response:
                 raise Exception("API call failed after retrying")
