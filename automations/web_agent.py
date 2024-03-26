@@ -17,9 +17,6 @@ google_cloud_credentials = json.loads(os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
 ocr_service = GoogleVisionOCRService(google_cloud_credentials)
 tarsier = Tarsier(ocr_service)
 
-model = OpenAI()
-model.timeout = 30
-
 api_keys = [
     os.getenv("OPENAI_API_KEY"),
     os.getenv("OPENAI_API_KEY1"),
@@ -152,6 +149,8 @@ class JoshyTrain:
             self.step_count += 1
 
     async def chat(self, input):
+        model = OpenAI()
+        model.timeout = 30
         await self.process_page()
         self.messages.append(
             {"role": "user", "content": input},
@@ -196,10 +195,12 @@ class JoshyTrain:
                     )
                     break
                 except RateLimitError as e:
-                    model = OpenAI(api_key=api_keys[attempt + 1])
+                    model = OpenAI(api_key=api_keys[(attempt + 1) % len(api_keys)])
                     print(
                         f"Rate limit exceeded, attempt {attempt + 1} of {3}. Retrying with new API key..."
                     )
+                except Exception as e:
+                    print(e)
 
             if not response:
                 raise Exception("API call failed after retrying")

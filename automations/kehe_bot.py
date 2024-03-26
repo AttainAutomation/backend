@@ -190,6 +190,8 @@ async def main():
 
         browser = await p.chromium.launch(headless=False, slow_mo=50)
         page = await browser.new_page()
+        joshyTrain = JoshyTrain(page)
+
         ## LOGGING IN
         await page.goto("https://connectretailer.kehe.com/")
         await page.wait_for_timeout(5000)
@@ -197,8 +199,12 @@ async def main():
         await page.click(".btn.btn-primary.btn-medium.login-button")
         await page.fill("#password", password)
         await page.get_by_text("Log In", exact=True).click()
-
         await page.wait_for_timeout(5000)
+        response= await joshyTrain.chat("""Is the login successful? The login is ONLY failed if the page SPECIFICALLY shows that the login has failed. Respond in the following JSON format: {"login": "true or false"}""")
+        data = extract_json(response)
+        if data["login"] == "false":
+            await page.screenshot(path="screenshot.jpg", full_page=True)
+            raise Exception("Incorrect login credentials")
 
         rows = read_from_csv(fileName)
         for row in rows:
