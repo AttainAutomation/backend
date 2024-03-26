@@ -152,9 +152,11 @@ class JoshyTrain:
         model = OpenAI()
         model.timeout = 30
         await self.process_page()
-        self.messages.append(
+        
+        self.messages = [
+            {"role": "system", "content": self.instructions},
             {"role": "user", "content": input},
-        )
+        ]
 
         print("User:", input)
 
@@ -214,8 +216,6 @@ class JoshyTrain:
                     "content": message_text,
                 }
             )
-
-            self.messages = [self.messages[0]] + self.messages[-4:]
 
             print("Browser Assistant:", message_text)
 
