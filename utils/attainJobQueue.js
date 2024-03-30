@@ -27,6 +27,10 @@ jobQueue.process(CONCURRENCY, async (job) => {
       automationPath = "./automations/kehe_bot.py";
       break;
     }
+    case "coremark": {
+      automationPath = "./automations/coremark_bot.py";
+      break;
+    }
     default: {
       return;
     }
