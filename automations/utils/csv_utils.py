@@ -16,3 +16,22 @@ def read_from_csv(fileName):
         dict_reader = csv.DictReader(file)
         return [row for row in dict_reader]
                 
+def print_csv_column_values(filename):
+    """
+    Print column names and their corresponding values for each row in the CSV file,
+    starting from the second row (assuming the first row contains column names).
+
+    :param filename: Path to the CSV file.
+    """
+    with open(filename, mode='r', newline='') as file:
+        reader = csv.DictReader(file)
+
+        for row_number, row in enumerate(reader, start=1):  # Start counting from 1 for clarity
+            print(f"Row {row_number}:")
+            for column_name, value in row.items():
+                print(f"    {column_name}: {value}")
+            print()  # Add a blank line for separation between rows
+
+# Example usage
+filename = 'automations/utils/coremark.csv'  # Replace with your CSV file path
+print_csv_column_values(filename)
