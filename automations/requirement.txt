@@ -1,0 +1,7 @@
+asyncio
+playwright
+openai
+python-dotenv
+requests
+aiofiles
+tarsier
