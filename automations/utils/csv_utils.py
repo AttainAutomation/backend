@@ -31,7 +31,3 @@ def print_csv_column_values(filename):
             for column_name, value in row.items():
                 print(f"    {column_name}: {value}")
             print()  # Add a blank line for separation between rows
-
-# Example usage
-filename = 'automations/utils/coremark.csv'  # Replace with your CSV file path
-print_csv_column_values(filename)

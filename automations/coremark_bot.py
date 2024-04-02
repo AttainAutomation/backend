@@ -45,7 +45,7 @@ async def process_item(
     """Function to process the item based on UPC."""
     if not upc:
         update_csv_cell(
-            filename, row_index, "name_ordered", "zzzMissing UPC"
+            filename, row_index, "name_ordered", "ZZZMissing UPC"
         )  # Assuming 0-based index for rows
         return
 
@@ -82,7 +82,7 @@ async def process_item(
         else:
             if not btn_links:
                 print("the page is empty")
-                update_csv_cell(filename, row_index, "name_ordered", "zzzWrong UPC")
+                update_csv_cell(filename, row_index, "name_ordered", "ZZZWrong UPC")
             else:
                 print('Theres items loaded but all have "Out of Stock" indicated.')
                 update_csv_cell(filename, row_index, "is_out_of_stock", "True")
@@ -101,7 +101,7 @@ async def process_item(
         await page.locator(".dx-icon.dx-icon-arrowleft").click()
         print("Clicked on the back button successfully.")
         update_csv_cell(
-            filename, row_index, "name_ordered", "zzFailed to buy"
+            filename, row_index, "name_ordered", "ZZFailed to buy"
         )  # Update CSV to indicate failure
 
 
@@ -176,6 +176,26 @@ async def order_item(page, total_packs, pack_size):
         )
         fallback_selector = "div.ordering-input-content > div.flex-centered-vertical.margin-left-8 .dx-texteditor-input"
         await page.locator(fallback_selector).fill(str(cases_needed))
+
+        try:
+            # Wait for the selector to appear with a timeout (e.g., 5000 milliseconds = 5 seconds)
+            await page.wait_for_selector(
+                ".dx-button.dx-button-success.dx-button-mode-contained.dx-widget.button-left-indent.dx-button-has-text.dx-dialog-button",
+                timeout=3000,
+            )
+            button_exists = True
+        except Exception as e:
+            button_exists = False
+        if button_exists:
+            # If the button exists, click on the nested element with the text "Yes"
+            await page.locator(
+                ".dx-button.dx-button-success.dx-button-mode-contained.dx-widget.button-left-indent.dx-button-has-text.dx-dialog-button .dx-button-text",
+                has_text="Yes",
+            ).click()
+            print("Clicked on 'Yes' button.")
+        else:
+            print("The 'Yes' button does not exist.")
+
         overlay_exists = (
             await page.locator(
                 ".dx-overlay-wrapper.dx-dialog.dx-popup-wrapper.dx-dialog-wrapper.dx-dialog-root.dx-overlay-modal.dx-overlay-shader"
@@ -323,27 +343,26 @@ async def run(playwright: Playwright, filename: str, username, password) -> None
     browser = await playwright.chromium.launch(headless=False)
     context = await browser.new_context()
     page = await context.new_page()
-    page = await login(page, username, password)
+    page = await login(page, "065762013", "Dl#013")
     remove_csv_whitespace(filename)
     ensure_second_column_name_ordered(filename)
-    sort_csv_by_column(filename, "product_name")
     remove_csv_whitespace(filename)
     upcs = read_csv(filename)
     for row_index, row in enumerate(upcs):
-        if row_index >= 51:
-            upc = row.get("upc")
-            total_packs = row.get("total_packs_ordered")
-            pack_size = row.get("pack_size")
-            print(
-                "trying to order item with upc:",
-                upc,
-                "total_packs:",
-                total_packs,
-                "pack_size:",
-                pack_size,
-            )
-            await process_item(page, upc, filename, row_index, total_packs, pack_size)
-            await page.wait_for_timeout(1000)
+        upc = row.get("upc")
+        total_packs = row.get("total_packs_ordered")
+        pack_size = row.get("pack_size")
+        print(
+            "trying to order item with upc:",
+            upc,
+            "total_packs:",
+            total_packs,
+            "pack_size:",
+            pack_size,
+        )
+        await process_item(page, upc, filename, row_index, total_packs, pack_size)
+        await page.wait_for_timeout(1000)
+    sort_csv_by_column(filename, "name_ordered")
     await context.close()
     await browser.close()
 
