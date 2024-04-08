@@ -169,22 +169,34 @@ If I'm doing that I'll just say that I didn't find the item
 
 async def main():
     async with async_playwright() as p:
-        # Initialize the parser
-        parser = argparse.ArgumentParser()
+        # # Initialize the parser
+        # parser = argparse.ArgumentParser()
 
-        # Add parameters
-        parser.add_argument("-f", type=str)
-        parser.add_argument("-u", type=str)
-        parser.add_argument("-p", type=str)
+        # # Add parameters
+        # parser.add_argument("-f", type=str)
+        # parser.add_argument("-u", type=str)
+        # parser.add_argument("-p", type=str)
 
-        # Parse the arguments
-        fileName = parser.parse_args().f
-        username = parser.parse_args().u
-        password = parser.parse_args().p
+        # # Parse the arguments
+        # fileName = parser.parse_args().f
+        # username = parser.parse_args().u
+        # password = parser.parse_args().p
 
-        # fileName = "kehe4.csv"
-        # username = "batu@duffl.com"
-        # password = "dufflucla2020"
+        fileName = "uploads/5bd1969ac5064f2aca673a971a1744fb.csv"
+        username = "deven@duffl.com"
+        password = "devandshady2021"
+
+        fileName = "uploads/b8df10b0ca6a1d058b7619f36c6391ae.csv"
+        username = "jack@duffl.com"
+        password = "dufflucsb2021"
+
+        fileName = "uploads/7b42a4e118bac1236ab83d851e4891fd.csv"
+        username = "brian@duffl.com"
+        password = "dufflusc2020"
+
+        fileName = "uploads/e1301f47e7fa611d4a1fc2cbbf3dba68.csv"
+        username = "batu@duffl.com"
+        password = "dufflucla2020"
 
         print(fileName, username, password)
 
@@ -200,7 +212,9 @@ async def main():
         await page.fill("#password", password)
         await page.get_by_text("Log In", exact=True).click()
         await page.wait_for_timeout(5000)
-        response= await joshyTrain.chat("""Is the login successful? The login is ONLY failed if the page SPECIFICALLY shows that the login has failed. Respond in the following JSON format: {"login": "true or false"}""")
+        response = await joshyTrain.chat(
+            """Is the login successful? The login is ONLY failed if the page SPECIFICALLY shows that the login has failed. Respond in the following JSON format: {"login": "true or false"}"""
+        )
         data = extract_json(response)
         if data["login"] == "false":
             await page.screenshot(path="screenshot.jpg", full_page=True)
@@ -232,9 +246,12 @@ async def main():
                 product_name = await page.inner_text(
                     'span[data-automation-id="edo-products-list-item-product-name"]'
                 )
-                product_size = await page.inner_text(
-                    "div[_ngcontent-ng-c2225601486]:nth-of-type(2)"
-                )
+                try:
+                    product_size = await page.inner_text(
+                        "div[_ngcontent-ng-c1969079652]:nth-of-type(2)"
+                    )
+                except:
+                    product_size = ""
                 row["name_ordered"] = (
                     brand_name + " " + product_name + " " + product_size
                 )
@@ -296,7 +313,7 @@ async def main():
                 row["is_out_of_stock"] = True
                 row["out_of_stock_reason"] = "product_oos"
 
-        fileName = "./results/" + fileName.split("/")[1] + ".csv"
+        fileName = "./results/" + fileName.split("/")[1].split(".")[0] + ".csv"
         write_to_csv(rows, fileName, alphabetical=True)
 
 
